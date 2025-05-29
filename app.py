@@ -1,4 +1,5 @@
 import streamlit as st
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from helper import (
     read_pdf,
     rewrite_to_four_sections,
@@ -19,7 +20,7 @@ st.set_page_config(page_title="Doodler",
 
 # --- Sidebar ---
 st.sidebar.image("imgs/logo_white.png")
-st.sidebar.write("<br>" * 18, unsafe_allow_html=True) 
+st.sidebar.write("<br>" * 16, unsafe_allow_html=True) 
 upload = st.sidebar.file_uploader("")
 
 
@@ -62,8 +63,6 @@ if (
     "last_upload_name" not in st.session_state
     or st.session_state.last_upload_name != upload.name
 ):
-
-
     # parse the PDF (cached)
     report = read_pdf(upload)
 
@@ -76,19 +75,32 @@ if (
                 }
 
     # write image prompt per section
-    prompts = {
-        name: rewrite_to_image_prompt(txt, name)
-        for name, txt in input_text.items()
-    }
+    with ThreadPoolExecutor(max_workers=len(input_text)) as exe:
+        prompt_futures = {
+            exe.submit(rewrite_to_image_prompt, txt, name): name
+            for name, txt in input_text.items()
+        }
+        prompts = {}
+        for fut in as_completed(prompt_futures):
+            name = prompt_futures[fut]
+            prompts[name] = fut.result()
 
     # generate images 
-    st.session_state.images = [
-        generate_image(p) for p in prompts.values()
-    ]
+    with ThreadPoolExecutor(max_workers=len(prompts)) as exe:
+        image_futures = {
+            exe.submit(generate_image, pr): name
+            for name, pr in prompts.items()
+        }
+        images_dict = {}
+        for fut in as_completed(image_futures):
+            name = image_futures[fut]
+            images_dict[name] = fut.result()
 
     # save for next run
+    st.session_state.prompts = prompts
+    st.session_state.images = [images_dict[name] for name in input_text.keys()]
+    st.session_state.input_text       = input_text    
     st.session_state.last_upload_name = upload.name
-    st.session_state.input_text = input_text
     st.session_state.idx = 0
 
 images = st.session_state.images
