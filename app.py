@@ -1,5 +1,12 @@
 import streamlit as st
+from helper import (
+    read_pdf,
+    rewrite_to_four_sections,
+    rewrite_to_image_prompt,
+    generate_image,
+)
 
+# set general settings
 st.set_page_config(page_title="Doodler", 
                    page_icon="✏️", 
                    initial_sidebar_state="expanded",
@@ -9,13 +16,14 @@ st.set_page_config(page_title="Doodler",
                         }
     )
 
-# set-up side bar
+
+# --- Sidebar ---
 st.sidebar.image("imgs/logo_white.png")
-st.sidebar.write("<br>" * 20, unsafe_allow_html=True) 
-my_upload = st.sidebar.file_uploader("")
+st.sidebar.write("<br>" * 18, unsafe_allow_html=True) 
+upload = st.sidebar.file_uploader("")
 
 
-# set-up main page
+# --- Main page ---
 # CSS to control button width
 st.markdown(
     """
@@ -31,56 +39,75 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Initialize the index in session_state
+titles = [
+    "Introductie",
+    "Klachten",
+    "Oorzaken", 
+    "Advies"
+]
+
+# --- Carousel state ---
 if "idx" not in st.session_state:
     st.session_state.idx = 0
 
-if my_upload is None:
+# --- If no file: show start screen ---
+if not upload:
     # display explainer image
     st.write("<br>" * 5, unsafe_allow_html=True) 
     st.image("imgs/start.png", use_container_width=True)
-else:
-    # Display the navigation buttons
-    col1, col2, col3 = st.columns([1, 3, 1])
+    st.stop()
 
-    with col1:
-        if st.button("Vorige"):
-            st.session_state.idx = max(st.session_state.idx - 1, 0)
+# --- Only rerun generation when we see a new file ---
+if (
+    "last_upload_name" not in st.session_state
+    or st.session_state.last_upload_name != upload.name
+):
 
-    with col3:
-        if st.button("Volgende"):
-            st.session_state.idx = min(st.session_state.idx + 1, len(images) - 1)
 
-    # 4) Display image, caption & description
-    st.image(images[st.session_state.idx], use_container_width=True)
+    # parse the PDF (cached)
+    report = read_pdf(upload)
 
-    # 5) Display title & description in expander
-    with st.expander(f"**{titles[st.session_state.idx]}**", expanded=False):
-        st.markdown("""
-        - **Vriendelijkheid en humor**: Je staat bekend als een vriendelijke en humorvolle jongere. Dit merk je vaak op school en thuis, waar je met je grapjes en vriendelijkheid mensen aan het lachen maakt en een fijne sfeer creëert.\n\n
+    # structure into 4 sections (cached)
+    sections = rewrite_to_four_sections(report)
+    input_text = {"Eigenschappen": sections.alinea_1,
+                    "Klachten": sections.alinea_2,
+                    "Klacht Oorzaaken": sections.alinea_3,
+                    "Behandeladviezen": sections.alinea_4,
+                }
 
-        - **Basale sociale vaardigheden**: Je kunt gemakkelijk contact maken met anderen. Bijvoorbeeld als je iemand voor het eerst ontmoet, ben je goed in het beginnen van een gesprek.\n\n
+    # write image prompt per section
+    prompts = {
+        name: rewrite_to_image_prompt(txt, name)
+        for name, txt in input_text.items()
+    }
 
-        - **Cognitief ingesteld**: Je hebt interesses die soms anders zijn dan die van je leeftijdsgenoten. Dit kan bijvoorbeeld zijn als je dingen leuk vindt die andere kinderen niet direct snappen.\n\n
+    # generate images 
+    st.session_state.images = [
+        generate_image(p) for p in prompts.values()
+    ]
 
-        - **Sterk rechtvaardigheidsgevoel**: Je vindt het belangrijk dat dingen eerlijk zijn en hebt daar soms uitgesproken meningen over, vooral als je ziet dat anderen onrecht worden aangedaan.\n\n
+    # save for next run
+    st.session_state.last_upload_name = upload.name
+    st.session_state.input_text = input_text
+    st.session_state.idx = 0
 
-        - **Verbaal sterk en hoog werkgeheugen**: Jij kunt goed je gedachten onder woorden brengen en onthoudt veel dingen die je ziet of hoort, waardoor je vaak snel dingen oppikt in de les.
-        """)
+images = st.session_state.images
+names  = list(st.session_state.input_text.keys())
 
-# set-up mainpage
-# # 1) Your list of images (URLs or local file paths)
-# images = [
-#     "imgs/1.png",
-#     "imgs/2.png",
-#     "imgs/3.png",
-#     "imgs/4.png",
-# ]
+# --- Navigation buttons ---
+col1, col2, col3 = st.columns([1, 3, 1])
+with col1:
+    if st.button("Vorige"):
+        st.session_state.idx = max(st.session_state.idx - 1, 0)
+with col3:
+    if st.button("Volgende"):
+        st.session_state.idx = min(st.session_state.idx + 1, len(images) - 1)
 
-# titles = [
-#     "Introductie",
-#     "Klachten",
-#     "Oorzaken", 
-#     "Behandeling"
-# ]
+# --- Display current image & text ---
+i = st.session_state.idx
+st.image(images[i], use_container_width=True)
+
+with st.expander(f"**{titles[st.session_state.idx]}**", expanded=False):
+    st.markdown(st.session_state.input_text[names[i]]) 
+
 
