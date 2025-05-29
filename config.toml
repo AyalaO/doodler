@@ -1,6 +1,0 @@
-[theme]
-base = "light"
-backgroundColor = "#E1EEE6"
-
-[theme.sidebar]
-backgroundColor = "#E1EEE6"
