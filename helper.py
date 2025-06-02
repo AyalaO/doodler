@@ -17,7 +17,7 @@ class Alineas(BaseModel):
     alinea_4: str
 
 
-@st.cache_data(show_spinner=True)
+@st.cache_data(show_spinner=False)
 def read_pdf(file):
     reader = PdfReader(file)
     all_text = []
@@ -29,7 +29,7 @@ def read_pdf(file):
     return "\n\n".join(all_text)
 
 
-@st.cache_data(show_spinner=True)
+@st.cache_data(show_spinner=False)
 def rewrite_to_four_sections(
     report: str,
     model: str = "gpt-4o",
@@ -63,7 +63,7 @@ def rewrite_to_four_sections(
     return response.output_parsed
 
 
-@st.cache_data(show_spinner=True)
+@st.cache_data(show_spinner=False)
 def rewrite_to_image_prompt(
     report: str,
     topic: str,
@@ -94,7 +94,7 @@ def rewrite_to_image_prompt(
     return response.output_text
 
 
-@st.cache_data(show_spinner=True)
+@st.cache_data(show_spinner=False)
 def generate_image(prompt):
 
     # TODO: collect all prompts in one file
