@@ -13,16 +13,16 @@ st.set_page_config(page_title="Doodler",
                    initial_sidebar_state="expanded",
                    menu_items={
                         'Get Help': 'mailto:ayala.ohyon@gmail.com',
-                        'About': "# This is a header. This is an *extremely* cool app!"
+                        'About': "Welkom bij Doodler!"
                         }
     )
 
 
 # --- Sidebar ---
 st.sidebar.image("imgs/logo_white.png")
-# st.sidebar.write("<br>" * 16, unsafe_allow_html=True) 
-# upload = st.sidebar.file_uploader("")
-
+st.sidebar.image("imgs/explainer.png")
+st.sidebar.write("""Zorggesprekken zijn vaak te talig, te snel en te abstract. Ouders en jeugdigen missen overzicht en verliezen regie.
+Doodler brengt overzicht met AI-gegenereerde praatplaten – zodat iedereen aan tafel weet waar het over gaat.""")
 
 # --- Main page ---
 # CSS to control button width
@@ -55,27 +55,36 @@ titles = [
 if "idx" not in st.session_state:
     st.session_state.idx = 0
 
+# --- Processing state to prevent infinite loops ---
+if "processing" not in st.session_state:
+    st.session_state.processing = False
+
 # --- If no file: show start screen ---
 if 'uploaded_file' not in st.session_state or st.session_state.uploaded_file is None:
-    st.write("<br>" * 5, unsafe_allow_html=True) 
-    col1, col2, col3 = st.columns([1, 3, 1])
+    # st.write("<br>" * 5, unsafe_allow_html=True) 
+    col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.subheader("Doodler helpt het grote plaatje te bespreken")
-        st.markdown("Doodler is een AI-tool waarmee patiënten hun medische kwestie beter kunnen begrijpen door middel van doodles.")
-        st.write("<br>", unsafe_allow_html=True) 
-        st.markdown("Upload een geanonimseerd medisch verslag en wij maken er een doodle van.")
+        # st.subheader("Doodler helpt het grote plaatje te bespreken")
+        st.subheader("Genereer een AI Doodle")
+        # st.markdown("Doodler is een AI-tool waarmee patiënten hun medische kwestie beter kunnen begrijpen door middel van doodles.")
+        # st.write("<br>", unsafe_allow_html=True) 
+        st.write("Upload een geanonimseerd medisch verslag en wij maken er een doodle van.")
         uploaded_file = st.file_uploader("", type=['pdf'])
 
     # Sla uploaded file op in session state
     if uploaded_file is not None:
         st.session_state.uploaded_file = uploaded_file
+        st.session_state.processing = True  # Set processing flag
         st.rerun()
 else:
-    uploaded_file = st.session_state.uploaded_file
     # --- Only rerun generation when we see a new file ---
+    uploaded_file = st.session_state.uploaded_file
     if (
-        "last_upload_name" not in st.session_state
-        or st.session_state.last_upload_name != uploaded_file.name
+        st.session_state.processing or
+        (
+            "last_upload_name" not in st.session_state
+            or st.session_state.last_upload_name != uploaded_file.name
+        )
     ):
         # show waiting image
         st.write("<br>" * 5, unsafe_allow_html=True) 
@@ -123,7 +132,10 @@ else:
         st.session_state.input_text = input_text    
         st.session_state.last_upload_name = uploaded_file.name
         st.session_state.idx = 0
-
+        st.session_state.processing = False  # Clear processing flag
+        st.rerun()
+    
+    # --- This code only runs when processing is complete ---
     images = st.session_state.images
     names  = list(st.session_state.input_text.keys())
 
@@ -148,6 +160,14 @@ else:
         # Reset de file uploader door de key te veranderen en session state te wissen
         st.session_state.file_uploader_key += 1
         st.session_state.uploaded_file = None
+        st.session_state.processing = False  # Reset processing flag
+        # Clear other states to be safe
+        if 'last_upload_name' in st.session_state:
+            del st.session_state.last_upload_name
+        if 'images' in st.session_state:
+            del st.session_state.images
+        if 'input_text' in st.session_state:
+            del st.session_state.input_text
         st.rerun()
 
 
