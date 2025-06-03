@@ -20,7 +20,7 @@ st.set_page_config(page_title="Doodler",
 
 # --- Sidebar ---
 st.sidebar.image("imgs/logo_white.png")
-st.sidebar.image("imgs/explainer.png")
+st.sidebar.image("imgs/explainer.png") 
 st.sidebar.write("""Zorggesprekken zijn vaak te talig, te snel en te abstract. Ouders en jeugdigen missen overzicht en verliezen regie.
 Doodler brengt overzicht met AI-gegenereerde praatplaten – zodat iedereen aan tafel weet waar het over gaat.""")
 
@@ -161,7 +161,8 @@ else:
         st.session_state.file_uploader_key += 1
         st.session_state.uploaded_file = None
         st.session_state.processing = False  # Reset processing flag
-        # Clear other states to be safe
+        st.cache_data.clear()  # This clears all cached functions
+        # Clear other states 
         if 'last_upload_name' in st.session_state:
             del st.session_state.last_upload_name
         if 'images' in st.session_state:
