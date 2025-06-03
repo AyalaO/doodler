@@ -68,7 +68,7 @@ if 'uploaded_file' not in st.session_state or st.session_state.uploaded_file is 
         st.subheader("Genereer een AI Doodle")
         # st.markdown("Doodler is een AI-tool waarmee patiënten hun medische kwestie beter kunnen begrijpen door middel van doodles.")
         # st.write("<br>", unsafe_allow_html=True) 
-        st.write("Upload een geanonimseerd medisch verslag en wij maken er een doodle van.")
+        st.write("Upload een geanonimiseerd medisch verslag en wij maken er een doodle van.")
         uploaded_file = st.file_uploader("", type=['pdf'])
 
     # Sla uploaded file op in session state
