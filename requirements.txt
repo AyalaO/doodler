@@ -27,7 +27,7 @@ numpy==2.2.6
 openai==1.82.0
 packaging==24.2
 pandas==2.2.3
-pillow @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_a48h7ifhf6/croot/pillow_1744613605363/work
+pillow==11.2.1
 protobuf==6.31.0
 pyarrow==20.0.0
 pydantic==2.11.5
@@ -37,7 +37,7 @@ PyPDF2==3.0.1
 python-dateutil==2.9.0.post0
 pytz==2025.2
 referencing==0.36.2
-reportlab @ file:///private/var/folders/sy/f16zz6x50xz3113nwtb9bvq00000gp/T/abs_ddw_0w07_x/croot/reportlab_1737041655727/work
+reportlab==4.4.2
 requests==2.32.3
 rpds-py==0.25.1
 six==1.17.0
