@@ -287,7 +287,7 @@ if st.session_state.generation_completed and 'images' in st.session_state:
     with st.expander(f"**Toelichting**", expanded=False):
         st.markdown(st.session_state.input_text[names[i]])
 
-    col1, col2, col3 = st.columns([1, 3, 1])
+    col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1])
     # with col1:
     #     st.write("<br>", unsafe_allow_html=True)
     #     if st.button("Nieuwe Doodler", type="primary"):
