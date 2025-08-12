@@ -1,256 +1,287 @@
 import streamlit as st
 from PyPDF2 import PdfReader
-import openai, base64
-from pydantic import BaseModel
+import base64
+from pydantic import BaseModel, Field
+from typing import List, Dict, Tuple
 import io
+from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
+from PIL.Image import Resampling
 import textwrap
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+from openai import OpenAI
 from prompts import (
     FOUR_SECTIONS_SYSTEM,
     IMAGE_PROMPT_SYSTEM_TEMPLATE,
     STATIC_IMAGE_PROMPT,
 )
 
-client = openai.OpenAI()
-
-class Alineas(BaseModel):
-    alinea_1: str
-    alinea_2: str
-    alinea_3: str
-    alinea_4: str
-
+client = OpenAI()
 
 @st.cache_data(show_spinner=False)
 def read_pdf(file):
     reader = PdfReader(file)
     all_text = []
-
     for page in reader.pages:
         txt = page.extract_text() or ""
         all_text.append(txt)
-
     return "\n\n".join(all_text)
 
+class Topic(BaseModel):
+    title: str
+    description: str
+
+class Alinea(BaseModel):
+    topics: List[Topic] = Field(..., min_length=4, max_length=4)
+
+class Document(BaseModel):
+    eigenschappen: Alinea
+    aanleidingen: Alinea
+    inzichten: Alinea
+    adviezen: Alinea
 
 @st.cache_data(show_spinner=False)
-def rewrite_to_four_sections(
-    report: str,
-    model: str = "gpt-4o",
-) -> Alineas:
-    """
-    Transforms a dry psychological report into four sections: 
-    1. the childs characteristics
-    2. the childs symptoms 
-    3. explanation why the child experiences those symptoms
-    4. treatment advice
-
-    Parameters:
-    - report: The original text from the doctor's report.
-    - model: OpenAI model to use (default "gpt-4o").
-
-    Returns:
-    - An Alineas object with four separate alineas
-    """
-    
-    system_prompt = FOUR_SECTIONS_SYSTEM
+def rewrite_to_four_sections(report: str, model: str = "gpt-4o") -> Document:
     messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"VERSLAG:\n{report}"}
+        {"role": "system", "content": FOUR_SECTIONS_SYSTEM},
+        {"role": "user",   "content": f"VERSLAG:\n{report}"}
     ]
     response = client.responses.parse(
         model=model,
         input=messages,
-        text_format = Alineas,
+        text_format=Document
     )
-
     return response.output_parsed
-
 
 @st.cache_data(show_spinner=False)
 def rewrite_to_image_prompt(
-    report: str,
-    topic: str,
-    patient_eigenschappen: str,
-    model: str = "gpt-4o",
-) -> str:
-    """
-    Transforms a psychological report description into a detailed image-generation prompt.
-
-    Parameters:
-    - report: The summary text from the doctor's report.
-    - topics: Topic of the image (Eigenschappen, Klachten, Klacht verklaringen, Behandeladviezen) 
-    - model: OpenAI model to use (default "gpt-4o").
-
-    Returns:
-    - A single string ready to pass to an image-generation API.
-    """
-    system_prompt = IMAGE_PROMPT_SYSTEM_TEMPLATE.format(topic=topic, 
-                                                        topic_short=topic[:-2], 
-                                                        patient_eigenschappen=patient_eigenschappen)
+    doc_json: str,
+    model: str = "gpt-4o"
+) -> Document:
     messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Dry description:\n{report}"}
+        {"role": "system", "content": IMAGE_PROMPT_SYSTEM_TEMPLATE},
+        {"role": "user",   "content": f"INPUT_DOCUMENT:\n{doc_json}"}
     ]
-
-    response = client.responses.create(
+    response = client.responses.parse(
         model=model,
         input=messages,
+        text_format=Document
     )
-
-    return response.output_text
-
+    return response.output_parsed
 
 @st.cache_data(show_spinner=False)
-def generate_image(prompt):
-
-    # TODO: collect all prompts in one file
-    static_prompt = STATIC_IMAGE_PROMPT
-
-    final_prompt = static_prompt + prompt
+def generate_image(prompt: str) -> bytes:
+    # NB: zorg dat dit pad bestaat
     result = client.images.edit(
-    model="gpt-image-1",
-    image=[
-        open("imgs/example_1.png", "rb"),
-        open("imgs/example_2.png", "rb"),
-        open("imgs/example_3.png", "rb"),
-    ],
-    prompt=final_prompt,
-    size="1536x1024"
+        model="gpt-image-1",
+        image=[open("imgs/example_4.png", "rb")],
+        prompt=prompt,
+        size="1536x1024"
     )
-    
-    image_base64 = result.data[0].b64_json
-    return base64.b64decode(image_base64)
+    image_bytes = base64.b64decode(result.data[0].b64_json)
+    return image_bytes
 
-# def create_clickable_image_selector():
-#     """Create a clickable image selector for style selection"""
-    
-#     # Initialize selected style in session state if not exists
-#     if 'selected_style' not in st.session_state:
-#         st.session_state.selected_style = 'stijl1'
-    
-#     # Add custom CSS for styling
-#     st.markdown("""
-#     <style>
-#     /* Container for the image grid */
-#     .image-selector-container {
-#         display: flex;
-#         gap: 20px;
-#         justify-content: center;
-#         margin: 20px 0;
-#     }
-    
-#     /* Individual image container */
-#     .image-option {
-#         flex: 1;
-#         cursor: pointer;
-#         border-radius: 10px;
-#         overflow: hidden;
-#         transition: all 0.3s ease;
-#         border: 3px solid transparent;
-#         position: relative;
-#     }
-    
-#     .image-option:hover {
-#         transform: translateY(-5px);
-#         box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-#     }
-    
-#     .image-option.selected {
-#         border-color: #F4E1A1;
-#         box-shadow: 0 5px 20px rgba(31, 119, 180, 0.4);
-#     }
-    
-#     .image-option img {
-#         width: 100%;
-#         height: auto;
-#         display: block;
-#     }
-    
-#     /* Checkmark for selected image */
-#     .image-option.selected::after {
-#         content: '✓';
-#         position: absolute;
-#         top: 10px;
-#         right: 10px;
-#         background: #F4E1A1;
-#         color: white;
-#         width: 30px;
-#         height: 30px;
-#         border-radius: 50%;
-#         display: flex;
-#         align-items: center;
-#         justify-content: center;
-#         font-weight: bold;
-#         font-size: 18px;
-#     }
-#     </style>
-#     """, unsafe_allow_html=True)
-    
-#     # Create columns for the images
-#     col1, col2, col3 = st.columns(3)
-    
-#     # Style 1
-#     with col1:
-#         if st.button("Stijl 1", key="style1_btn", help="Selecteer Stijl 1", use_container_width=True):
-#             st.session_state.selected_style = 'stijl1'
-#             st.rerun()
-        
-#         # Apply selected styling
-#         selected_class = "selected" if st.session_state.selected_style == 'stijl1' else ""
-#         st.markdown(f'<div class="image-option {selected_class}">', unsafe_allow_html=True)
-#         st.image("imgs/stijl_1.png", use_container_width=True)
-#         st.markdown('</div>', unsafe_allow_html=True)
-    
-#     # Style 2
-#     with col2:
-#         if st.button("Stijl 2", key="style2_btn", help="Selecteer Stijl 2", use_container_width=True):
-#             st.session_state.selected_style = 'stijl2'
-#             st.rerun()
-        
-#         selected_class = "selected" if st.session_state.selected_style == 'stijl2' else ""
-#         st.markdown(f'<div class="image-option {selected_class}">', unsafe_allow_html=True)
-#         st.image("imgs/stijl_2.png", use_container_width=True)
-#         st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Style 3
-    with col3:
-        if st.button("Stijl 3", key="style3_btn", help="Selecteer Stijl 3", use_container_width=True):
-            st.session_state.selected_style = 'stijl3'
-            st.rerun()
-        
-        selected_class = "selected" if st.session_state.selected_style == 'stijl3' else ""
-        st.markdown(f'<div class="image-option {selected_class}">', unsafe_allow_html=True)
-        st.image("imgs/stijl_3.png", use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+def overlay_labels(
+    image_bytes: bytes,
+    annotations: List[Dict[str, float]],
+    font_path: str = "./fonts/Avenir Regular.ttf",
+    font_size: int = 24
+) -> bytes:
+    img = Image.open(BytesIO(image_bytes)).convert("RGBA")
+    draw = ImageDraw.Draw(img)
+
+    try:
+        font = ImageFont.truetype(font_path, font_size)
+    except OSError:
+        raise FileNotFoundError(f"Kan het font niet laden van {font_path}. Plaats je .ttf in de fonts/ map?")
+
+    pad = 4
+    for ann in annotations:
+        label = ann['label']
+        x = int(ann['x_pct'] * img.width)
+        y = int(ann['y_pct'] * img.height)
+        bbox = draw.textbbox((x, y), label, font=font)
+        rect = [(bbox[0] - pad, bbox[1] - pad),(bbox[2] + pad, bbox[3] + pad)]
+        draw.rectangle(rect, fill="white")
+        draw.text((x, y), label, font=font, fill="black")
+
+    output = BytesIO()
+    img.convert("RGB").save(output, format="PNG")
+    return output.getvalue()
+
+def add_logo_with_frame(
+    image_bytes: bytes,
+    logo_path: str,
+    title: str,
+    output_path: str,
+    font_path: str = "./fonts/Avenir Regular.ttf",
+    font_size: int = 24,
+    padding: int = 20,
+    bg_color: Tuple[int, int, int] = (225, 238, 230),
+    logo_ratio: float = 1.0,
+    frame_width: int = 20
+) -> bytes:
+    base = Image.open(BytesIO(image_bytes)).convert("RGBA")
+    if base.size != (1536, 1024):
+        raise ValueError(f"Expected base size 1536×1024 but got {base.size}")
+
+    logo = Image.open(logo_path).convert("RGBA")
+    if logo_ratio != 1.0:
+        logo = logo.resize(
+            (int(logo.width * logo_ratio), int(logo.height * logo_ratio)),
+            resample=Resampling.LANCZOS
+        )
+
+    try:
+        font = ImageFont.truetype(font_path, font_size)
+    except OSError:
+        raise FileNotFoundError(
+            f"Cannot load font from {font_path}. Please ensure the .ttf is in the fonts/ directory."
+        )
+
+    inner_w = 1536
+    inner_h = 1024 + padding + logo.height + padding
+    full_w = inner_w + 2 * frame_width
+    full_h = inner_h + 2 * frame_width
+
+    canvas_img = Image.new("RGBA", (full_w, full_h), (*bg_color, 255))
+    canvas_img.paste(base, (frame_width, frame_width), base)
+
+    strip_y = frame_width + 1024 + padding
+    logo_x = frame_width + inner_w - logo.width - padding
+    logo_y = strip_y
+    canvas_img.paste(logo, (logo_x, logo_y), logo)
+
+    draw = ImageDraw.Draw(canvas_img)
+    bbox = draw.textbbox((0, 0), title, font=font)
+    text_h = bbox[3] - bbox[1]
+    text_x = frame_width + padding
+    text_y = logo_y + (logo.height - text_h) // 2 - 10
+    draw.text((text_x, text_y), title, font=font, fill="black")
+
+    final_img = canvas_img.convert("RGB")
+    final_img.save(output_path)
+
+    buf = BytesIO()
+    final_img.save(buf, format="PNG")
+    return buf.getvalue()
+
+def generate_all_images(clean_input: dict) -> Dict[str, bytes]:
+    jobs = []
+    for section, data in clean_input.items():
+        desc = data['descriptions']
+        prompt = f"""
+Keep exactly the same grid and placement as the example.
+Maintain identical drawing area and blank-space margins.
+Match the exact style: neutral, minimal line figures with single-line arms/legs.
+IMPORTANT: Heads must be simple circles with no hair—do not draw any hairlines, bangs, curls, or styles.
+Use only light yellow (#F4E1A1) and light green (#E1EEE6) accents.
+Do NOT add any text.
+
+Change the content as follows:
+1. middle figure has expression that matches emotions below
+2. top left shows: {desc[0]}
+3. top right shows: {desc[1]}
+4. bottom left shows: {desc[2]}
+5. bottom right shows: {desc[3]}
+"""
+        jobs.append((section, prompt))
+
+    results: Dict[str, bytes] = {}
+    if not jobs:
+        return results
+
+    with ThreadPoolExecutor(max_workers=min(len(jobs), 4)) as executor:
+        future_to_section = {executor.submit(generate_image, prompt): section for section, prompt in jobs}
+        for future in as_completed(future_to_section):
+            section = future_to_section[future]
+            try:
+                img_bytes = future.result()
+                results[section] = img_bytes
+            except Exception as e:
+                # log naar Streamlit in plaats van crashen
+                st.warning(f"Genereren mislukt voor '{section}': {e}")
+
+    return results
 
 def generate_pdf_bytes(names, images):
+    import io, os, re
+    from xml.sax.saxutils import escape as xml_escape
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage, PageBreak
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from PIL import Image as PILImage
+
+    # --- (optioneel) eigen font registreren voor PDF-tekst ---
+    font_name = "Helvetica"
+    font_path = "./fonts/Avenir Regular.ttf"
+    if os.path.exists(font_path):
+        try:
+            pdfmetrics.registerFont(TTFont("Avenir", font_path))
+            font_name = "Avenir"
+        except Exception:
+            pass  # val terug op Helvetica
+
+    # --- Markdown -> ReportLab inline markup ---
+    def md_to_rl(text: str) -> str:
+        # Escape eerst &, <, >
+        s = xml_escape(text)
+        # **bold** -> <b>bold</b>
+        s = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", s)
+        # *italic* of _italic_ -> <i>italic</i>
+        s = re.sub(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)", r"<i>\1</i>", s)
+        s = re.sub(r"_(.+?)_", r"<i>\1</i>", s)
+        # Nieuwe regels -> <br/>
+        s = s.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "<br/>")
+        return s
+
     buf = io.BytesIO()
-    pdf = canvas.Canvas(buf, pagesize=A4)
-    width, height = A4
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A4,
+        leftMargin=20*mm, rightMargin=20*mm,
+        topMargin=18*mm, bottomMargin=18*mm,
+    )
+
+    styles = getSampleStyleSheet()
+    body = ParagraphStyle(
+        "Body",
+        parent=styles["BodyText"],
+        fontName=font_name,
+        fontSize=11,
+        leading=14,
+    )
+
+    story = []
+    page_width, page_height = A4
+
     for idx, key in enumerate(names):
-        img = Image.open(io.BytesIO(images[idx]))
-        img_buf = io.BytesIO()
-        img.save(img_buf, format="PNG")
-        img_buf.seek(0)
-        reader = ImageReader(img_buf)
-        iw, ih = reader.getSize()
-        dw = width - 80
-        dh = dw * (ih / iw)
-        pdf.drawImage(reader, 40, height - dh - 40, dw, dh)
-        pdf.setFont("Helvetica", 10)
-        txt = st.session_state.input_text[key]
-        text_obj = pdf.beginText(40, height - dh - 60)
-        # Wrap text to fit page width
-        max_chars = int((width - 80) / 6)
-        wrapped = []
-        for paragraph in txt.split("\n"):
-            wrapped.extend(textwrap.wrap(paragraph, max_chars))
-        for line in wrapped:
-            text_obj.textLine(line)
-        pdf.drawText(text_obj)
-        pdf.showPage()
-    pdf.save()
+        # --- Afbeelding schalen op paginabreedte ---
+        img_bytes = images[idx]
+        pil = PILImage.open(io.BytesIO(img_bytes))
+        iw, ih = pil.size
+        avail_w = doc.width
+        scaled_h = avail_w * (ih / iw)
+
+        story.append(RLImage(io.BytesIO(img_bytes), width=avail_w, height=scaled_h))
+        story.append(Spacer(1, 8*mm))
+
+        # --- Markdown-tekst omzetten en plaatsen ---
+        raw_md = st.session_state.input_text.get(key, "")
+        para = Paragraph(md_to_rl(raw_md), body)
+        story.append(para)
+
+        # Nieuwe pagina per sectie (behalve na de laatste)
+        if idx < len(names) - 1:
+            story.append(PageBreak())
+
+    doc.build(story)
     return buf.getvalue()
+

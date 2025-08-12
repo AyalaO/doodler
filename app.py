@@ -1,388 +1,308 @@
-# import streamlit as st
-# from concurrent.futures import ThreadPoolExecutor, as_completed
-# from helper import (
-#     read_pdf,
-#     rewrite_to_four_sections,
-#     rewrite_to_image_prompt,
-#     generate_image,
-#     create_clickable_image_selector,
-# )
-
-# # set general settings
-# st.set_page_config(page_title="Doodler", 
-#                    page_icon="✏️", 
-#                    initial_sidebar_state="expanded",
-#                    menu_items={
-#                         'Get Help': 'mailto:ayala.ohyon@gmail.com',
-#                         'About': "Welkom bij Doodler!"
-#                         }
-#     )
-
-
-# # --- Sidebar ---
-# st.sidebar.image("imgs/logo_white.png")
-# st.sidebar.image("imgs/explainer.png") 
-# st.sidebar.write("""Zorggesprekken zijn vaak erg verbaal, snel en abstract. Ouders en jeugdigen missen overzicht en verliezen regie.
-# Doodler brengt overzicht met AI-gegenereerde praatplaten – zodat iedereen aan tafel weet waar het over gaat.""")
-
-# # --- Main page ---
-# # CSS to control button width
-# st.markdown(
-#     """
-#     <style>
-#     /* make every Streamlit button at least 120px wide */
-#     div.stButton > button {
-#         min-width: 120px;
-#     }
-#     /* if you prefer buttons to stretch to fill their column: */
-#     /* div.stButton > button { width: 100%; } */
-#     </style>
-#     """,
-#     unsafe_allow_html=True,
-# )
-
-# # Initiate session state for file reset
-# if 'file_uploader_key' not in st.session_state:
-#     st.session_state.file_uploader_key = 0
-
-# titles = [
-#     "Introductie",
-#     "Klachten",
-#     "Oorzaken", 
-#     "Advies"
-# ]
-
-# # --- Carousel state ---
-# if "idx" not in st.session_state:
-#     st.session_state.idx = 0
-
-# # --- Processing state to prevent infinite loops ---
-# if "processing" not in st.session_state:
-#     st.session_state.processing = False
-
-# # --- Generation completed state ---
-# if "generation_completed" not in st.session_state:
-#     st.session_state.generation_completed = False
-
-# # --- File upload section (only visible when no results are shown) ---
-# if not st.session_state.generation_completed:
-#     col1, col2, col3 = st.columns([1, 3, 1])
-#     with col2:
-#         st.subheader("Genereer een AI Doodle")
-#         st.write("Upload een geanonimiseerd medisch verslag en wij maken er een doodle van.")
-#         st.markdown("**1: Upload een medisch verslag** ")
-#         uploaded_file = st.file_uploader("", type=['pdf'], key=f"file_uploader_{st.session_state.file_uploader_key}")
-#         st.markdown("**2: Selecteer een stijl** ")
-#         create_clickable_image_selector()
-    
-#         st.markdown("**3: Omschrijf patient karakteristieken** ")
-#         patient_eigenschappen = st.text_input(label= "patient_eigenschappen", label_visibility="hidden")
-        
-#         # Store uploaded file in session state
-#         if uploaded_file is not None:
-#             st.session_state.uploaded_file = uploaded_file
-        
-#         # Generate button
-#         generate_clicked = st.button("Genereer Doodle", type="primary")
-        
-#         # Error message if no file is uploaded and generate is clicked
-#         if generate_clicked and uploaded_file is None:
-#             st.error("⚠️ Upload eerst een PDF bestand voordat je doodles kunt genereren.")
-# else:
-#     # When results are shown, get the uploaded file from session state
-#     uploaded_file = st.session_state.get('uploaded_file')
-#     generate_clicked = False
-
-# # --- Check if we should start generation ---
-# should_generate = (
-#     generate_clicked and 
-#     uploaded_file is not None and 
-#     not st.session_state.processing and
-#     (
-#         not st.session_state.generation_completed or
-#         ("last_upload_name" not in st.session_state or 
-#          st.session_state.last_upload_name != uploaded_file.name)
-#     )
-# )
-
-# if should_generate:
-#     st.session_state.processing = True
-#     st.session_state.generation_completed = False
-#     st.rerun()
-
-# # --- Processing section ---
-# if st.session_state.processing and uploaded_file is not None:
-#     # show waiting image
-#     st.write("<br>" * 2, unsafe_allow_html=True) 
-#     st.image("imgs/placeholder.png", use_container_width=True)
-    
-#     # parse the PDF (cached)
-#     with st.spinner("Adviesrapport wordt gelezen.."):
-#         report = read_pdf(uploaded_file)
-
-#     # structure into 4 sections (cached)
-# with st.spinner("Verhaallijn wordt gemaakt.."):
-#     sections = rewrite_to_four_sections(report)
-#     input_text = {
-#         "Eigenschappen": sections.alinea_1,
-#         "Klachten": sections.alinea_2,
-#         "Klacht Oorzaken": sections.alinea_3,
-#         "Behandeladviezen": sections.alinea_4,
-#     }
-
-# with st.spinner("Doodlers worden ontworpen.."):
-#     # write image prompt per section (sequential)
-#     prompts = {
-#         name: rewrite_to_image_prompt(txt, name, patient_eigenschappen)
-#         for name, txt in input_text.items()
-#     }
-
-# with st.spinner("Doodles worden getekend.."):
-#     # generate images per prompt (sequential)
-#     images_dict = {
-#         name: generate_image(prompt)
-#         for name, prompt in prompts.items()
-#     }
-
-#     # save for next run
-#     st.session_state.prompts = prompts
-#     st.session_state.images = [images_dict[name] for name in input_text.keys()]
-#     st.session_state.input_text = input_text    
-#     st.session_state.last_upload_name = uploaded_file.name
-#     st.session_state.idx = 0
-#     st.session_state.processing = False
-#     st.session_state.generation_completed = True
-#     st.rerun()
-
-# # --- Display results section (only if generation is completed) ---
-# if st.session_state.generation_completed and 'images' in st.session_state:
-#     images = st.session_state.images
-#     names = list(st.session_state.input_text.keys())
-
-#     st.write("<br>" * 2, unsafe_allow_html=True)
-    
-#     # --- Navigation buttons ---
-#     col1, col2, col3 = st.columns([1, 3, 1])
-#     with col1:
-#         if st.button("Vorige"):
-#             st.session_state.idx = max(st.session_state.idx - 1, 0)
-#     with col3:
-#         if st.button("Volgende"):
-#             st.session_state.idx = min(st.session_state.idx + 1, len(images) - 1)
-
-#     # --- Display current image & text ---
-#     i = st.session_state.idx
-#     st.image(images[i], use_container_width=True)
-
-#     with st.expander(f"**{titles[st.session_state.idx]}**", expanded=False):
-#         st.markdown(st.session_state.input_text[names[i]]) 
-
-# # --- Reset button (only visible when there are results) ---
-# if st.session_state.generation_completed:
-#     st.write("<br>", unsafe_allow_html=True)
-#     if st.button("🔄 Upload een nieuw bestand"):
-#         # Reset the file uploader by changing the key and clearing session state
-#         st.session_state.file_uploader_key += 1
-#         st.session_state.uploaded_file = None
-#         st.session_state.processing = False
-#         st.session_state.generation_completed = False
-#         st.cache_data.clear()  # This clears all cached functions
-#         # Clear other states 
-#         for key in ['last_upload_name', 'images', 'input_text', 'prompts']:
-#             if key in st.session_state:
-#                 del st.session_state[key]
-#         st.rerun()
 
 import streamlit as st
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from helper import (
     read_pdf,
     rewrite_to_four_sections,
     rewrite_to_image_prompt,
-    generate_image,
+    generate_all_images,
+    overlay_labels,
+    add_logo_with_frame,
     generate_pdf_bytes,
 )
-# new imports at the top
-import io
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader
-from PIL import Image
+from datetime import datetime
+import os
 
-# set general settings
+# ---------- Config ----------
 st.set_page_config(
-    page_title="Doodler", 
-    page_icon="✏️", 
-    initial_sidebar_state="expanded",
-    menu_items={
-        'Get Help': 'mailto:ayala.ohyon@gmail.com',
-        'About': "Welkom bij Doodler!"
-    }
+    page_title="Doodler",
+    page_icon="✏️",
+    initial_sidebar_state="collapsed",
+    menu_items={'Get Help': 'mailto:ayala@doodler.app','About': "Welkom bij Doodler!"}
 )
 
-# --- Sidebar ---
+# Pad naar je voorbeeld PDF (pas aan naar wens)
+SAMPLE_PDF_PATH = "assets/voorbeeld_verslag.pdf"
+
+# ---------- Sidebar ----------
 st.sidebar.image("imgs/logo_white.png")
-st.sidebar.image("imgs/explainer.png")
-st.sidebar.write(
-    """
-    Zorggesprekken zijn vaak erg verbaal, snel en abstract. Ouders en jeugdigen missen overzicht en verliezen regie.
-    Doodler brengt overzicht met AI-gegenereerde praatplaten – zodat iedereen aan tafel weet waar het over gaat.
-    """
-)
 
-# --- Main page CSS ---
+# ---------- Kleine CSS tweak ----------
 st.markdown(
     """
     <style>
-    div.stButton > button {
-        min-width: 135px;
-    }
+      /* ====== Brand kleuren ====== */
+      :root {
+        --brand-link: #8ca38f;
+        --brand-link-hover: #7d9c90;
+      }
+
+      /* ====== Basis layout ====== */
+      .hero { text-align:center; padding-top:.5rem; }
+      .hero img { margin-bottom:.5rem; }
+      .tagline { font-size:1.05rem; color:#374151; max-width:820px; margin:0 auto .25rem auto; }
+      .muted { text-align:center; color:#8ca38f; }
+      .center { text-align:center; }
+
+      /* ====== CTA-knop dominant, tekst zwart ====== */
+      div.stButton > button {
+        width:100%;
+        padding:0.5rem 1.1rem;
+        border-radius:9999px;
+        font-weight:600;
+        font-size:1.05rem;
+      }
+      div.stButton > button[kind="primary"],
+      div.stButton > button[kind="primary"]:hover,
+      div.stButton > button[kind="primary"]:focus,
+      div.stButton > button[kind="primary"]:active {
+        color: #000 !important;
+      }
+
+      /* ====== Link-styling (globaal) ====== */
+      a, a:visited {
+        color: var(--brand-link) !important;
+        text-decoration: underline; /* haal desgewenst weg */
+      }
+      a:hover, a:focus {
+        color: var(--brand-link-hover) !important;
+      }
+      a:focus {
+        outline: 2px solid var(--brand-link-hover);
+        outline-offset: 2px;
+      }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
-# Initialize session state variables
-if 'file_uploader_key' not in st.session_state:
-    st.session_state.file_uploader_key = 0
-if 'idx' not in st.session_state:
-    st.session_state.idx = 0
-if 'processing' not in st.session_state:
-    st.session_state.processing = False
-if 'generation_completed' not in st.session_state:
-    st.session_state.generation_completed = False
 
-# Titles for display
-titles = ["Introductie", "Klachten", "Oorzaken", "Advies"]
+# ---------- Session state ----------
+st.session_state.setdefault('view', 'home')           # home vs generator
+st.session_state.setdefault('file_uploader_key', 0)
+st.session_state.setdefault('idx', 0)
+st.session_state.setdefault('processing', False)
+st.session_state.setdefault('generation_completed', False)
 
-# File upload and controls (when generation not completed)
+# UI labels & vaste sectievolgorde
+ui_titles = ["Eigenschappen", "Aanleidingen", "Inzichten", "Adviezen"]
+sections_order = ["eigenschappen", "aanleidingen", "inzichten", "adviezen"]
+
+# ====== HOMESCREEN ======
+if st.session_state.view == 'home':
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        # Logo + korte waardepropositie
+        st.markdown("<div class='hero'>", unsafe_allow_html=True)
+        st.image("imgs/logo.png", width=300)
+        st.subheader("Doodler maakt zorggesprekken visueel")
+        st.markdown(
+            "<p class='tagline'>Upload een verslag en AI creëert automatisch heldere illustraties die het gesprek ondersteunen. " \
+            "Zo kan iedereen aan tafel – zorgverlener én cliënt – gemakkelijker meepraten en onthouden wat er besproken is.</p>",
+            unsafe_allow_html=True,
+        )
+        st.divider()
+        # Één duidelijke CTA
+        if st.button("Bekijk demo", type="primary", use_container_width=True):
+            st.session_state.view = 'generator'
+            st.rerun()
+    with col2:
+        st.markdown("<div style='height:5rem'></div>", unsafe_allow_html=True)  # kleine spacer
+        st.image("imgs/homepage.png", use_container_width=True)
+
+    st.stop()
+
+
+# ====== GENERATOR SCHERM ======
+# Top navigatie
+nav_col1, nav_col2, nav_col3 = st.columns([1, 3, 1])
+with nav_col1:
+    if st.button("←"):
+        # reset naar homescreen
+        st.session_state.view = 'home'
+        st.session_state.file_uploader_key += 1
+        for key in ['uploaded_file', 'last_upload_name', 'prompts', 'images', 'input_text', 'generation_completed']:
+            st.session_state.pop(key, None)
+        st.session_state.processing = False
+        st.rerun()
+
+# ---------- Upload + knop ----------
 if not st.session_state.generation_completed:
     col1, col2, col3 = st.columns([1, 3, 1])
     with col2:
+        # Korte uitleg + inline link naar voorbeeld-PDF (geen extra knop)
+        import os, base64
+        def _inline_pdf_link(path: str, label: str) -> str:
+            if not os.path.exists(path):
+                return ""
+            with open(path, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode()
+            # data-URL met download-attribuut; subtiele link, geen button
+            return f'<a href="data:application/pdf;base64,{b64}" download="{os.path.basename(path)}">{label}</a>'
+
+        link_html = _inline_pdf_link(SAMPLE_PDF_PATH, "download dit voorbeeldverslag")
         st.subheader("Genereer een AI Doodle")
-        st.markdown("**1: Upload een medisch verslag** ")
-        st.text("Kies een adviesgesprek verslag waar je een Doodle van wilt hebben")
+        st.markdown("<p class='muted'><em>momenteel alleen beschikbaar voor adviesgesprekken</em></p>", unsafe_allow_html=True)
+        st.markdown(f"""
+                    1. **Upload** een geanonimiseerd adviesgesprek verslag  
+                    *geen verslag bij de hand? {link_html}*
+                    2. **AI genereert** automatisch ondersteunende illustraties
+                    3. **Gebruik** de illustraties tijdens het gesprek
+                    """, unsafe_allow_html=True)
+
         uploaded_file = st.file_uploader(
             "", type=['pdf'], key=f"file_uploader_{st.session_state.file_uploader_key}"
         )
-        # st.markdown("**2: Selecteer een stijl** ")
-        # create_clickable_image_selector()
-        st.markdown("**2: Omschrijf patient karakteristieken** ")
-        st.text("Omschrijf client uiterlijke kenmerk")
-        patient_eigenschappen = st.text_input(
-            label="patient_eigenschappen", label_visibility="hidden"
-        )
         if uploaded_file is not None:
             st.session_state.uploaded_file = uploaded_file
+        st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)  # kleine spacer
         generate_clicked = st.button("Genereer Doodle", type="primary")
         if generate_clicked and 'uploaded_file' not in st.session_state:
             st.error("⚠️ Upload eerst een PDF bestand voordat je doodles kunt genereren.")
 else:
-    uploaded_file = st.session_state.uploaded_file
+    uploaded_file = st.session_state.get('uploaded_file')
     generate_clicked = False
 
-# Determine if generation should start
+# ---------- Startconditie ----------
 generate_condition = (
-    generate_clicked and
-    uploaded_file is not None and
-    not st.session_state.processing and
-    (
-        not st.session_state.generation_completed or
-        st.session_state.last_upload_name != uploaded_file.name
+    ('uploaded_file' in st.session_state)
+    and not st.session_state.processing
+    and (
+        (generate_clicked)
+        or (
+            st.session_state.generation_completed
+            and st.session_state.get('last_upload_name') != st.session_state.uploaded_file.name
+        )
     )
 )
+
 if generate_condition:
     st.session_state.processing = True
     st.session_state.generation_completed = False
     st.rerun()
 
-# Processing and generation pipeline
+# ---------- Pipeline ----------
 col1, col2, col3 = st.columns([1, 3, 1])
 with col2:
     if st.session_state.processing and 'uploaded_file' in st.session_state:
         uploaded_file = st.session_state.uploaded_file
-        # Step 1: Read PDF
+
+        # 1) PDF lezen
         with st.spinner("Adviesrapport wordt gelezen.."):
             report = read_pdf(uploaded_file)
-        # Step 2: Rewrite into 4 sections
-        with st.spinner("Verhaallijn wordt gemaakt.."):
-            sections = rewrite_to_four_sections(report)
-            input_text = {
-                "Eigenschappen": sections.alinea_1,
-                "Klachten": sections.alinea_2,
-                "Klacht Oorzaken": sections.alinea_3,
-                "Behandeladviezen": sections.alinea_4,
-            }
-        # Step 3: Create prompts
-        with st.spinner("Doodlers worden ontworpen.."):
-            with ThreadPoolExecutor(max_workers=len(input_text)) as exe:
-                prompt_futures = {
-                    exe.submit(rewrite_to_image_prompt, txt, name, patient_eigenschappen): name
-                    for name, txt in input_text.items()
-                }
-                prompts = {}
-                for fut in as_completed(prompt_futures):
-                    name = prompt_futures[fut]
-                    prompts[name] = fut.result()
-        # Step 4: Generate images
-        with st.spinner("Doodles worden getekend.."):
-            with ThreadPoolExecutor(max_workers=len(prompts)) as exe:
-                image_futures = {
-                    exe.submit(generate_image, pr): name
-                    for name, pr in prompts.items()
-                }
-                images_dict = {}
-                for fut in as_completed(image_futures):
-                    name = image_futures[fut]
-                    images_dict[name] = fut.result()
 
-        # Save results and update state
-        st.session_state.prompts = prompts
-        st.session_state.images = [images_dict[name] for name in input_text.keys()]
-        st.session_state.input_text = input_text
+        # 2) Naar 4 secties (Document)
+        with st.spinner("Verhaallijn wordt gemaakt.."):
+            sections_doc = rewrite_to_four_sections(report)
+
+        # 3) Prompts (korte titels + visuele beschrijvingen)
+        with st.spinner("Doodlers worden ontworpen.."):
+            visuals = rewrite_to_image_prompt(sections_doc.model_dump_json())
+
+            # clean_input voor image generatie
+            clean_input = {}
+            visuals_dict = visuals.model_dump()
+            for section in sections_order:
+                content = visuals_dict[section]
+                section_titles = [topic['title'] for topic in content['topics']]
+                descriptions = [topic['description'] for topic in content['topics']]
+                clean_input[section] = {'titels': section_titles, 'descriptions': descriptions}
+
+            # Tekst voor expanders/PDF
+            section_texts = {}
+            orig = sections_doc.model_dump()
+            for section in sections_order:
+                lines = []
+                for t in orig[section]['topics']:
+                    lines.append(f"**{t['title']}** — {t['description']}")
+                section_texts[section] = "\n\n".join(lines)
+
+        # 4) Afbeeldingen genereren (strict: precies 4 of fout)
+        with st.spinner("Doodles worden getekend.."):
+            try:
+                images_map = generate_all_images(clean_input)
+            except Exception as e:
+                st.session_state.processing = False
+                st.session_state.generation_completed = False
+                st.error(f"Afbeeldingen genereren mislukt: {e}")
+                st.stop()
+
+        # 5) Labels + logo + frame
+        images_with_labels = {}
+        images_final = {}
+        for section in sections_order:
+            annotations = [
+                {"label": clean_input[section]['titels'][0], "x_pct": 0.10, "y_pct": 0.40},
+                {"label": clean_input[section]['titels'][1], "x_pct": 0.70, "y_pct": 0.40},
+                {"label": clean_input[section]['titels'][2], "x_pct": 0.10, "y_pct": 0.85},
+                {"label": clean_input[section]['titels'][3], "x_pct": 0.70, "y_pct": 0.85},
+            ]
+            images_with_labels[section] = overlay_labels(images_map[section], annotations, font_size=45)
+            images_final[section] = add_logo_with_frame(
+                images_with_labels[section],
+                logo_path="imgs/logo.png",  # jouw gekleurde logo
+                title=section.title(),
+                output_path=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{section}.png",
+                font_path="./fonts/Avenir Regular.ttf",
+                font_size=40,
+                padding=10,
+                bg_color=(225, 238, 230),
+                logo_ratio=0.22,
+                frame_width=10
+            )
+
+        # 6) State opslaan
+        st.session_state.prompts = clean_input
+        st.session_state.images = [images_final[s] for s in sections_order]
+        st.session_state.input_text = section_texts
         st.session_state.last_upload_name = uploaded_file.name
         st.session_state.processing = False
         st.session_state.generation_completed = True
         st.session_state.idx = 0
         st.rerun()
 
-# Display results when ready
+# ---------- Weergave ----------
 if st.session_state.generation_completed and 'images' in st.session_state:
     images = st.session_state.images
-    names = list(st.session_state.input_text.keys())
+    names = [s for s in sections_order if s in st.session_state.input_text]
     i = st.session_state.idx
+
     st.write("<br>" * 2, unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 3, 1])
     with col1:
-        if st.button("Vorige"):
+        if st.button("Vorige", key="prev_btn"):
             st.session_state.idx = max(st.session_state.idx - 1, 0)
-    with col2:
-        st.markdown(f"<h3 style='text-align: center; '>{titles[i]}</h1>", unsafe_allow_html=True)
+
     with col3:
-        if st.button("Volgende"):
-            st.session_state.idx = min(
-                st.session_state.idx + 1, len(images) - 1
-            )
+        if st.button("Volgende", key="next_btn"):
+            st.session_state.idx = min(st.session_state.idx + 1, len(images) - 1)
+
+    # >>> lees i pas na het verwerken van de knoppen
+    i = st.session_state.idx
+
+    with col2:
+        st.markdown(f"<h3 style='text-align: center;'>{ui_titles[i]}</h3>", unsafe_allow_html=True)
+
     st.image(images[i], use_container_width=True)
-    with st.expander(f"**{titles[i]}**", expanded=False):
+    with st.expander(f"**Toelichting**", expanded=False):
         st.markdown(st.session_state.input_text[names[i]])
-    print(st.session_state.prompts)
-    # Reset button
+
     col1, col2, col3 = st.columns([1, 3, 1])
-    with col1:
-        st.write("<br>", unsafe_allow_html=True)
-        if st.button("Nieuwe Doodler", type="primary"): 
-            st.session_state.file_uploader_key += 1
-            for key in ['uploaded_file', 'last_upload_name', 'prompts', 'images', 'input_text', 'generation_completed']:
-                st.session_state.pop(key, None)
-            st.session_state.processing = False
-            st.cache_data.clear()
+    # with col1:
+    #     st.write("<br>", unsafe_allow_html=True)
+    #     if st.button("Nieuwe Doodler", type="primary"):
+    #         st.session_state.file_uploader_key += 1
+    #         for key in ['uploaded_file', 'last_upload_name', 'prompts', 'images', 'input_text', 'generation_completed']:
+    #             st.session_state.pop(key, None)
+    #         st.session_state.processing = False
+    #         st.cache_data.clear()
+    #         st.session_state.view = 'home'  # terug naar homescreen
+    #         st.rerun()
     with col3:
         st.write("<br>", unsafe_allow_html=True)
         st.download_button(
             label="Download PDF",
             data=generate_pdf_bytes(names, images),
-            file_name="doodles.pdf",
+            file_name="Doodler.pdf",
             mime="application/pdf",
             type="primary"
-        ) 
+        )
