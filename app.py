@@ -40,7 +40,7 @@ st.markdown(
       .hero { text-align:center; padding-top:.5rem; }
       .hero img { margin-bottom:.5rem; }
       .tagline { font-size:1.05rem; color:#374151; max-width:820px; margin:0 auto .25rem auto; }
-      .muted { text-align:center; color:#8ca38f; }
+      .muted { color:#8ca38f; }
       .center { text-align:center; }
 
       /* ====== CTA-knop dominant, tekst zwart ====== */
@@ -140,12 +140,13 @@ if not st.session_state.generation_completed:
             return f'<a href="data:application/pdf;base64,{b64}" download="{os.path.basename(path)}">{label}</a>'
 
         link_html = _inline_pdf_link(SAMPLE_PDF_PATH, "download dit voorbeeldverslag")
-        st.subheader("Genereer een AI Doodle")
+        st.subheader("Visualiseer je verslag")
         st.markdown("<p class='muted'><em>momenteel alleen beschikbaar voor adviesgesprekken</em></p>", unsafe_allow_html=True)
         st.markdown(f"""
                     1. **Upload** een geanonimiseerd adviesgesprek verslag  
                     *geen verslag bij de hand? {link_html}*
-                    2. **AI genereert** automatisch ondersteunende illustraties
+                    2. **Genereer illustraties** met Doodler AI
+                    3. **Pas de tekst aan** indien gewenst
                     3. **Gebruik** de illustraties tijdens het gesprek
                     """, unsafe_allow_html=True)
 
