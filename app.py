@@ -21,7 +21,7 @@ st.set_page_config(
 )
 
 # Pad naar je voorbeeld PDF (pas aan naar wens)
-SAMPLE_PDF_PATH = "assets/voorbeeld_verslag.pdf"
+SAMPLE_PDF_PATH = "assets/Adviesgesprek_voorbeeld.pdf"
 
 # ---------- Sidebar ----------
 st.sidebar.image("imgs/logo_white.png")
@@ -45,7 +45,7 @@ st.markdown(
 
       /* ====== CTA-knop dominant, tekst zwart ====== */
       div.stButton > button {
-        width:100%;
+
         padding:0.5rem 1.1rem;
         border-radius:9999px;
         font-weight:600;
@@ -83,6 +83,7 @@ st.session_state.setdefault('idx', 0)
 st.session_state.setdefault('processing', False)
 st.session_state.setdefault('generation_completed', False)
 
+
 # UI labels & vaste sectievolgorde
 ui_titles = ["Eigenschappen", "Aanleidingen", "Inzichten", "Adviezen"]
 sections_order = ["eigenschappen", "aanleidingen", "inzichten", "adviezen"]
@@ -96,7 +97,7 @@ if st.session_state.view == 'home':
         st.image("imgs/logo.png", width=300)
         st.subheader("Doodler maakt zorggesprekken visueel")
         st.markdown(
-            "<p class='tagline'>Upload een verslag en AI creëert automatisch heldere illustraties die het gesprek ondersteunen. " \
+            "<p class='tagline'>Upload een verslag en Doodlers AI creëert automatisch heldere illustraties die het gesprek ondersteunen. " \
             "Zo kan iedereen aan tafel – zorgverlener én cliënt – gemakkelijker meepraten en onthouden wat er besproken is.</p>",
             unsafe_allow_html=True,
         )
@@ -145,7 +146,8 @@ if not st.session_state.generation_completed:
         st.markdown(f"""
                     1. **Upload** een geanonimiseerd adviesgesprek verslag  
                     *geen verslag bij de hand? {link_html}*
-                    2. **Genereer illustraties** met Doodler AI
+                    2. **Genereer illustraties** met Doodler AI  
+                    *dit duurt ongeveer 2 minuten*
                     3. **Pas de tekst aan** indien gewenst
                     3. **Gebruik** de illustraties tijdens het gesprek
                     """, unsafe_allow_html=True)
@@ -156,7 +158,7 @@ if not st.session_state.generation_completed:
         if uploaded_file is not None:
             st.session_state.uploaded_file = uploaded_file
         st.markdown("<div style='height:.5rem'></div>", unsafe_allow_html=True)  # kleine spacer
-        generate_clicked = st.button("Genereer Doodle", type="primary")
+        generate_clicked = st.button("Genereer Doodle", type="primary", use_container_width=True)
         if generate_clicked and 'uploaded_file' not in st.session_state:
             st.error("⚠️ Upload eerst een PDF bestand voordat je doodles kunt genereren.")
 else:
@@ -253,6 +255,16 @@ with col2:
 
         # 6) State opslaan
         st.session_state.prompts = clean_input
+        st.session_state.base_images = images_map  # <-- basis zonder labels (NIEUW)
+
+        # labels per sectie (kopie van titels, zodat we later kunnen editen)
+        st.session_state.labels = { 
+            section: clean_input[section]['titels'][:] for section in sections_order 
+        }
+
+        # handige mapping van sectienaam -> index in de getoonde lijst (voor snel vervangen)
+        st.session_state.section_to_index = {s: i for i, s in enumerate(sections_order)}
+
         st.session_state.images = [images_final[s] for s in sections_order]
         st.session_state.input_text = section_texts
         st.session_state.last_upload_name = uploaded_file.name
@@ -268,42 +280,114 @@ if st.session_state.generation_completed and 'images' in st.session_state:
     i = st.session_state.idx
 
     st.write("<br>" * 2, unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 3, 1])
+    col1, col2 = st.columns([4, 2])
     with col1:
-        if st.button("Vorige", key="prev_btn"):
-            st.session_state.idx = max(st.session_state.idx - 1, 0)
+        with col1:
+            # --- Vier knoppen-navigatie (st.button) ---
+            nav = [
+                ("1",  "eigenschappen", "Eigenschappen"),
+                ("2", "aanleidingen",  "Aanleidingen"),
+                ("3",  "inzichten",     "Inzichten"),
+                ("4",  "adviezen",      "Adviezen"),
+            ]
+            section_to_index = {s: i for i, s in enumerate(sections_order)}
 
-    with col3:
-        if st.button("Volgende", key="next_btn"):
-            st.session_state.idx = min(st.session_state.idx + 1, len(images) - 1)
+            btn_cols = st.columns(4)
+            for (short_label, section, full_label), c in zip(nav, btn_cols):
+                target_idx = section_to_index[section]
+                is_active = (st.session_state.idx == target_idx)
+                with c:
+                    clicked = st.button(
+                        short_label,
+                        key=f"nav_{section}",
+                        help=full_label,                # tooltip met volledige naam
+                        use_container_width=True,
+                        type=("primary" if is_active else "secondary"),
+                    )
+                    if clicked:
+                        st.session_state.idx = target_idx
+                        st.rerun()
 
-    # >>> lees i pas na het verwerken van de knoppen
-    i = st.session_state.idx
-
+            i = st.session_state.idx
+            st.image(images[i], use_container_width=True)
+            with st.expander("**Toelichting**", expanded=False):
+                st.markdown(st.session_state.input_text[names[i]])
+            
+    
+    # ====== Labels bewerken ======
     with col2:
-        st.markdown(f"<h3 style='text-align: center;'>{ui_titles[i]}</h3>", unsafe_allow_html=True)
+        st.markdown(
+                    """
+                    <style>
+                    /* Alleen de container van text_input compacter maken */
+                    div[data-baseweb="input"] {
+                        margin-bottom: -2.35rem !important; /* negatief om dichter op elkaar te komen */
+                    }
 
-    st.image(images[i], use_container_width=True)
-    with st.expander(f"**Toelichting**", expanded=False):
-        st.markdown(st.session_state.input_text[names[i]])
+                    /* Herstel marge boven de submit-knop */
+                    form div.stButton {
+                        margin-top: 1rem !important;
+                    }
+                   
+                    </style>
+                    """,
+                    unsafe_allow_html=True
+                )
+        st.markdown("<div style='height:2.5rem'></div>", unsafe_allow_html=True)  # kleine spacer
+        with st.expander("Tekst bewerken", expanded=True):
+            # Huidige sectie-naam en labels
+            current_section = names[i]
+            current_labels = st.session_state.labels.get(current_section, ["", "", "", ""])
 
-    col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1])
-    # with col1:
-    #     st.write("<br>", unsafe_allow_html=True)
-    #     if st.button("Nieuwe Doodler", type="primary"):
-    #         st.session_state.file_uploader_key += 1
-    #         for key in ['uploaded_file', 'last_upload_name', 'prompts', 'images', 'input_text', 'generation_completed']:
-    #             st.session_state.pop(key, None)
-    #         st.session_state.processing = False
-    #         st.cache_data.clear()
-    #         st.session_state.view = 'home'  # terug naar homescreen
-    #         st.rerun()
-    with col3:
-        st.write("<br>", unsafe_allow_html=True)
-        st.download_button(
-            label="Download PDF",
-            data=generate_pdf_bytes(names, images),
-            file_name="Doodler.pdf",
-            mime="application/pdf",
-            type="primary"
-        )
+            # Formulier met 4 velden + knop
+            with st.form(f"edit_labels_form_{i}", border=False):
+                new_t1 = st.text_input("Linksboven",  value=current_labels[0], label_visibility="hidden")
+                new_t2 = st.text_input("Rechtsboven", value=current_labels[1], label_visibility="hidden")
+                new_t3 = st.text_input("Linksonder",  value=current_labels[2], label_visibility="hidden")
+                new_t4 = st.text_input("Rechtsonder", value=current_labels[3], label_visibility="hidden")
+                st.markdown("<div style='height:3rem'></div>", unsafe_allow_html=True)  # kleine spacer
+                submitted = st.form_submit_button("Bewerk")
+
+            if submitted:
+                # 1) labels opslaan in state
+                st.session_state.labels[current_section] = [new_t1, new_t2, new_t3, new_t4]
+
+                # 2) annotations met vaste posities opnieuw opbouwen
+                annotations = [
+                    {"label": new_t1, "x_pct": 0.10, "y_pct": 0.40},
+                    {"label": new_t2, "x_pct": 0.70, "y_pct": 0.40},
+                    {"label": new_t3, "x_pct": 0.10, "y_pct": 0.85},
+                    {"label": new_t4, "x_pct": 0.70, "y_pct": 0.85},
+                ]
+
+                # 3) labels opnieuw over de BASIS-afbeelding zetten
+                base_bytes = st.session_state.base_images[current_section]
+                updated_with_labels = overlay_labels(base_bytes, annotations, font_size=45)
+
+                # 4) opnieuw rand + logo toevoegen (zoals bij generatie)
+                updated_final = add_logo_with_frame(
+                    updated_with_labels,
+                    logo_path="imgs/logo.png",
+                    title=current_section.title(),
+                    output_path=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{current_section}.png",
+                    font_path="./fonts/Avenir Regular.ttf",
+                    font_size=40,
+                    padding=10,
+                    bg_color=(225, 238, 230),
+                    logo_ratio=0.22,
+                    frame_width=10
+                )
+
+                # 5) de juiste index in de lijst vervangen en direct tonen
+                st.session_state.images[i] = updated_final
+                st.rerun()
+        
+            # st.markdown("<div style='height:0.05rem'></div>", unsafe_allow_html=True)  # kleine spacer
+            st.download_button(
+                label="Download PDF",
+                data=generate_pdf_bytes(names, images),
+                file_name="Doodler.pdf",
+                mime="application/pdf",
+                type="primary"
+            )
+
